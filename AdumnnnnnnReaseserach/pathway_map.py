@@ -1,2 +1,2 @@
-import pathway_utilities as pu
-import numpy as np
+"""Create a pathway network of the various complexes using networkx
+"""
