@@ -27,7 +27,6 @@ class Data():
     def get_data(self):
         return self.x
 
-
     def find_delay(self, method=None):
         """Wrapper function to determine the optimal embedding time-delay in a
         given time-series
@@ -59,9 +58,10 @@ class Data():
         dim : int
             The embedding dimension associated with the data.
         """
-        pass
+        if method.lower() == "cao":
+            return self._cao_embed()
 
-    def embed(self, delay=None, embedding=None):
+    def embed(self, delay=None, embed=None):
         """Uses Takens' theorem to embed the data according to a time delay and
         an embedding dimension.
 
@@ -70,13 +70,29 @@ class Data():
         delay : None or int, default=None
             The time delay used to reconstruct the original dynamics of the
             data. If delay=None, then the time delay will be automatically
-            assesed using ___.
-        embedding : None or int, default=None
+            assesed using delayed mutual information ('auto_mi').
+        embed : None or int, default=None
             The embedding dimension used to reconstruct the original
             dynamicss of the data. If embedding=None, then the embedding
-            dimension will automatically be assesed using ___.
+            dimension will automatically be assesed using Cao's embedding
+            method ('cao').
         """
-        pass
+        # We must splice the ends of the arrays so they are not jagged
+        max_len = self.x.shape[0] - (embed-1)*delay
+        if max_len < 1:
+            raise ValueError("Time delay and embedding are too large.")
+
+        # Automatically find the embedding dimension/time delay if necessary
+        if delay is None:
+            delay = self.find_delay(method='auto_mi')
+        if embed is None:
+            embed = self.find_dimension(method='cau')
+
+
+        # Generate and return the delay-embedded time-series
+        return np.column_stack([
+            self.x[d*delay: d*delay + max_len] for d in range(embed)
+        ])
 
     def _auto_mi(self, t_min=1, t_max=5, k=4):
         """Uses the first minimum of consecutive delayed mutual informations to
@@ -120,15 +136,8 @@ class Data():
         # IF the mi is monotonically decreasing, t=t_max
         return t_max
 
-
-def main():
-    arr = np.random.normal(size=1000)
-    data = Data(arr)
-
-    print(data._auto_mi())
-
-
-
-
-if __name__ == '__main__':
-    main()
+    def _cao_embed(self):
+        """Uses Cao's embedding method to determine the minimum embedding
+        dimension of the time-series.
+        """
+        pass
