@@ -149,8 +149,8 @@ def conditional_mutual_information(source, destination, condition, k=4,
 
 
 def transfer_entropy(source, destination, delay=1, source_delay=1,
-                         destination_delay=1, source_embed=1,
-                         destination_embed=1, k=4, locals=False):
+                     destination_delay=1, source_embed=1,
+                     destination_embed=1, k=4, locals=False):
     """Calculates the transfer entropy from one time-series Y to another time-
     series X using the Kraskov, Stoegbauer, Grassberger (KSG)
     mutual information estimator algorithm 1.
@@ -171,7 +171,7 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
         Taken's embedding dimension of the source variable.
     destination_embed : int, default=1
         Taken's embedding depth of the destination variable.
-    k : int, default=None
+    k : int, default=4
         The number of nearest neighbors to sample in the full joint space.
     locals : bool, default=False
         Whether to return the local values of the estimated transfer entropy
@@ -183,7 +183,7 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
         The estimated expected or local value(s) of the transfer entropy from
         the source to the destination.
     """
-    # Rename parameters to reduce clutter
+    # Rename some parameters to reduce clutter
     y = source
     x = destination
     y_delay = source_delay
