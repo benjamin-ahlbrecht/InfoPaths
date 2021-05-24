@@ -162,7 +162,6 @@ class Data():
 
                 # Calculate E1(d)
                 e1_d = e_d1 / e_d
-                print(f"E1(d={d-2}) = {e1_d}")
 
                 # Return the embedding dimension if it surpasses our threshold
                 if e1_d > cutoff:
