@@ -164,13 +164,13 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
     delay : int, default=1
         Delay between the source and the destination time series.
     source_delay : int, default=1
-        Taken's embedding delay of the source variable.
+        Takens' embedding delay of the source variable.
     destination_delay : int, default=1
-        Taken's embedding delay of the destination variable.
+        Takens' embedding delay of the destination variable.
     source_embed : int, default=1
-        Taken's embedding dimension of the source variable.
+        Takens' embedding dimension of the source variable.
     destination_embed : int, default=1
-        Taken's embedding depth of the destination variable.
+        Takens' embedding dimension of the destination variable.
     k : int, default=4
         The number of nearest neighbors to sample in the full joint space.
     locals : bool, default=False
@@ -220,7 +220,7 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
         y_cut + (y_embed - 1) * y_delay
     })
 
-    # Finally, create our Taken's embedding time-series
+    # Finally, create our Takens' embedding time-series
     xp = np.column_stack([x[xp_cut: xp_cut + xpxy_len]])
     x = np.column_stack([x[x_cut + t * x_delay: x_cut + t * x_delay + xpxy_len]
                         for t in range(x_embed)])
@@ -230,3 +230,115 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
     # Then, TE(Y -> X) = cmi(xp ; y | x)
     TEyx = conditional_mutual_information(xp, y, x, k=k, locals=locals)
     return TEyx
+
+
+def conditional_transfer_entropy(source, destination, conditions,
+                                 delay=1, source_delay=1, destination_delay=1,
+                                 conditional_delays=1, source_embed=1,
+                                 destination_embed=1, conditional_embeds=1,
+                                 k=4, locals=False):
+    """Calculates the transfer entropy from one time-series Y to another time-
+    series X using the Kraskov, Stoegbauer, Grassberger (KSG)
+    mutual information estimator algorithm 1.
+
+    Parameters
+    ----------
+    source : np.ndarray
+        Array representing the source time-series variable.
+    destination : np.ndarray
+        Array representing the destination time-series variable.
+    conditions : iterable of np.ndarrays
+        List where each element represents a source to condition upon.
+    delay : int, default=1
+        Delay between the source and the destination time series.
+    source_delay : int, default=1
+        Takens' embedding delay of the source variable.
+    destination_delay : int, default=1
+        Takens' embedding delay of the destination variable.
+    conditional_delays : int or np.ndarray of ints, default=1
+        Takens' embedding delay for the conditional variables
+    source_embed : int, default=1
+        Takens' embedding dimension of the source variable.
+    destination_embed : int, default=1
+        Takens' embedding dimension of the destination variable.
+    conditonal_embeds : int or np.ndarray of ints, default=1
+        Takens' embedding dimension for the conditional variables
+    k : int, default=4
+        The number of nearest neighbors to sample in the full joint space.
+    locals : bool, default=False
+        Whether to return the local values of the estimated transfer entropy
+        rather than the expected value.
+
+    Returns
+    -------
+    CTEyx : float or np.ndarray of floats
+        The estimated expected or local value(s) of the transfer entropy from
+        the source to the destination.
+    """
+    # Rename parameters to reduce clutter
+    y = source
+    x = destination
+    z = conditions
+    y_delay = source_delay
+    x_delay = destination_delay
+    z_delays = conditional_delays
+    y_embed = source_embed
+    x_embed = destination_embed
+    z_embeds = conditional_embeds
+
+    # Reshape our data properly
+    if len(source.shape) == 1:
+        y = y.reshape(-1, 1)
+
+    if len(destination.shape) == 1:
+        x = x.reshape(-1, 1)
+
+    for i, condition in enumerate(z):
+        if len(condition.shape) == 1:
+            z[i] = condition.reshape(-1, 1)
+
+    n = y.shape[0]
+
+    # Find how far into the future (+) or past (-) each time-series begins
+    xp_min = 1
+    x_min = -1 * (x_embed - 1) * x_delay
+    y_min = 1 - delay - (y_embed - 1) * y_delay
+    z_mins = -1 * (z_embeds - 1) * z_delays
+
+    # Select the lowest negative value and add to other time-series
+    xpxyz_min = min({xp_min, x_min, y_min, np.min(z_mins)})
+
+    # Calculate how many values we cut from the start of each time_series
+    xp_cut = xp_min - xpxyz_min
+    x_cut = x_min - xpxyz_min
+    y_cut = y_min - xpxyz_min
+    z_cuts = z_mins - xpxyz_min
+
+    # Calculate the maximum size so we can enforce a square array
+    xpxyz_len = n - max({
+        xp_cut,
+        x_cut + (x_embed - 1) * x_delay,
+        y_cut + (y_embed - 1) * y_delay,
+        np.max(z_cuts + (z_embeds - 1) * z_delays)
+    })
+
+    # Create our Takens' embedding time-series
+    xp = np.column_stack([x[xp_cut: xp_cut + xpxyz_len]])
+    x = np.column_stack([x[x_cut + t * x_delay: x_cut + t * x_delay + xpxyz_len]
+                        for t in range(x_embed)])
+    y = np.column_stack([y[y_cut + t * y_delay: y_cut + t * y_delay + xpxyz_len]
+                        for t in range(y_embed)])
+
+    for i, c in enumerate(z):
+        z[i] = np.column_stack([c[z_cuts[i] + t * z_delays[i]: z_cuts[i] + t * z_delays[i] + xpxyz_len]
+                               for t in range(z_embeds[i])])
+
+
+    # Condition on Z by simply appending it to X-
+    xz = x
+    for condition in z:
+        xz = np.column_stack((xz, condition))
+
+    # Then, CTE(Y -> X | Z) = cmi(xp ; y | xz)
+    CTEyx = conditional_mutual_information(xp, y, xz, k=k, locals=locals)
+    return CTEyx

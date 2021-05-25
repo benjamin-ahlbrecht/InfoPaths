@@ -3,6 +3,7 @@ from time import time
 
 from data import Data
 from utilities import transfer_entropy as te
+from utilities import conditional_transfer_entropy as cte
 
 
 class InfoPaths():
@@ -196,28 +197,45 @@ class InfoPaths():
             if val >= threshold:
                 te_sources.append(i)
 
+        # If we have no conflicting sources, then the source is causal
+        if len(te_sources) == 1:
+            adjacency[te_sources[0]] = 1
+
         # Determine whether each source is direct or spurious causality
-        for i, ind in enumerate(te_sources):
-            # Assign source parameters
-            source = self._X[ind]
-            source_delay = delays[ind]
-            source_embed = embeds[ind]
+        else:
+            for i, ind in enumerate(te_sources):
+                # Assign source parameters
+                source = self._X[:, ind]
+                source_delay = delays[ind]
+                source_embed = embeds[ind]
 
-            # Grab the indices to create our conditonal array
-            condition_inds = te_sources[:i] + te_sources[i+1:]
+                # Grab the indices to create our conditonal array
+                condition_inds = te_sources[:i] + te_sources[i + 1:]
 
-            # Construct the conditional array
-            conditions = np.zeros((self._nrows, len(condition_inds)))
-            for j, cond_ind in enumerate(condition_inds):
-                conditions[:, j] = self._X[:, cond_ind]
+                # Construct a list of our conditional features
+                conditions = []
+                for j, cond_ind in enumerate(condition_inds):
+                    conditions.append(self._X[:, cond_ind])
 
-            # TODO: Estimate the conditional transfer entropy
-            # CMI = cmi()
-            CMI = 1.2345 # Hard-coded just so it will run in the mean-time
+                # Gather our conditional time delays and embeddings
+                conditional_delays = np.array([
+                    delays[j] for j in condition_inds])
+                conditional_embeds = np.array([
+                    embeds[j] for j in condition_inds])
 
-            # Update adjacency vector if we meet the threshold
-            if CMI >= threshold:
-                adjacency[ind] = 1
+                # Estimate the conditional transfer entropy
+                CTEyx = cte(
+                    source=source, destination=dest, conditions=conditions,
+                    delay=1, source_delay=source_delay,
+                    destination_delay=dest_delay,
+                    conditional_delays=conditional_delays,
+                    source_embed=source_embed, destination_embed=dest_embed,
+                    conditional_embeds=conditional_embeds, k=k, locals=False
+                )
+
+                # Update adjacency vector if we meet the threshold
+                if CTEyx >= threshold:
+                    adjacency[ind] = 1
 
         if return_te:
             return adjacency, TE
@@ -325,7 +343,8 @@ class InfoPaths():
             if verbosity:
                 secs = time() - t1
                 mins = secs / 60
-                print(f"Done! ~ ({np.round(mins, 2)} min.) ({np.round(secs/self._ncols, 2)} sec./call)")
+                print(
+                    f"Done! ~ ({np.round(mins, 2)} min.) ({np.round(secs/self._ncols, 2)} sec./call)")
 
                 # Query the list of sources
                 sources = []
