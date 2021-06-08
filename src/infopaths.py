@@ -1,5 +1,7 @@
 import numpy as np
+
 from time import time
+from pickle import dump
 
 from data import Data
 from utilities import transfer_entropy as te
@@ -67,6 +69,18 @@ class InfoPaths():
     @property
     def adjacency_matrix(self):
         return self._adjacency_matrix
+
+    def save(self, fname):
+        """Serializes the InfoPaths() object, so the information can be
+        retrieved at a later data.
+
+        Parameters
+        ----------
+        fname : string
+            The filname to serialize the object
+        """
+        dump(self, open(fname, 'wb'))
+
 
     def compute_delays(self, t_min=1, t_max=5, k=4):
         """Computes the Takens' embedding time delays using delayed mutual
