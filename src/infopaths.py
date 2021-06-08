@@ -7,21 +7,30 @@ from utilities import conditional_transfer_entropy as cte
 
 
 class InfoPaths():
-    def __init__(self, X):
+    def __init__(self, X=None, pairwise=None):
         """Deduce causal links from time-series using the pairwise transfer
         entropy.
 
         Parameters
         ----------
-        X : np.ndarray of floats
+        X : None or np.ndarray of floats, default=None
             Time-series where each row represents a unique observation and each
             column represents a separate time-series feature.
+        pairwise : np.ndarray of
         """
         if not isinstance(X, np.ndarray):
             raise TypeError("Parameter 'X' must be of type np.ndarray")
 
         if len(X.shape) != 2:
             raise TypeError("Parameter 'X' must be 2-dimensional.")
+
+        if isinstance(X, np.ndarray):
+            if len(X.shape) != 2:
+                raise TypeError("Parameter 'X' must be 2-dimensional.")
+
+        if not isinstance(pairwise, np.ndarray) and pairwise is not None:
+            raise TypeError(
+                "Parameter 'pairwise' must be of type np.ndarray or NoneType")
 
         # Array, where rows/columns correpond to observations/features
         self._X = X
@@ -37,6 +46,8 @@ class InfoPaths():
 
         # Pairwise transfer entropy array
         self._pairwise_te = None
+        if pairwise is not None:
+            self._pairwise_te = pairwise
 
         # Adjacency matrix
         self._adjacency_matrix = None
@@ -129,7 +140,7 @@ class InfoPaths():
         return embeds
 
     def analyze_destination(self, which, delays, embeds, threshold=0.1, k=4,
-                            return_te=False, verbosity=False):
+                            return_te=False, use_pairwise=False):
         """Uses the pairwise transfer entropy to infer significant sources
         given a destination target.
 
@@ -151,10 +162,9 @@ class InfoPaths():
         return_te : bool, default=False
             Whether to return the transfer entropy values calculated for the
             destination.
-        verbosity : bool, default=False
-            Whether to provide verbosity when (if) computing source-destination
-            delays, Takens' embedding time-delays and embedding dimensions, and
-            transfer entropy values.
+        use_pairwise : bool, default=False
+            Whether to use the pairwise matrix provided during class
+            instantiation or the most recently computed.
 
         Returns
         -------
@@ -176,21 +186,26 @@ class InfoPaths():
         dest_delay = delays[which]
         dest_embed = delays[which]
 
-        # Array to hold TE values from each source to the target destination
-        TE = np.zeros(self._ncols)
-        for i in range(self._ncols):
-            # Assign source parameters
-            source = self._X[:, i]
-            source_delay = delays[i]
-            source_embed = embeds[i]
+        # Load or calculate pairwise transfer entropy
+        if use_pairwise:
+            # Grab transfer entropy values: sources -> destination
+            TE = self._pairwise_te[:, which]
+        else:
+            # Array to hold TE values from each source to the target destination
+            TE = np.zeros(self._ncols)
+            for i in range(self._ncols):
+                # Assign source parameters
+                source = self._X[:, i]
+                source_delay = delays[i]
+                source_embed = embeds[i]
 
-            # Populate our TE array with respective source values
-            TE[i] = te(
-                source=self._X[:, i], destination=dest, delay=1,
-                source_delay=source_delay, destination_delay=dest_delay,
-                source_embed=source_embed, destination_embed=dest_embed, k=k,
-                locals=False
-            )
+                # Populate our TE array with respective source values
+                TE[i] = te(
+                    source=self._X[:, i], destination=dest, delay=1,
+                    source_delay=source_delay, destination_delay=dest_delay,
+                    source_embed=source_embed, destination_embed=dest_embed,
+                    k=k, locals=False
+                    )
 
         # Find potential sources by testing against the threshold
         for i, val in enumerate(TE):
@@ -243,7 +258,7 @@ class InfoPaths():
         return adjacency
 
     def analyze_destinations(self, threshold=0.1, delays=None, embeds=None,
-                             k=4, verbosity=False):
+                             k=4, verbosity=False, use_pairwise=False):
         """Uses the pairwise transfer entropy to infer significant sources in
         the network.
 
@@ -269,6 +284,9 @@ class InfoPaths():
             Whether to provide verbosity when (if) computing source-destination
             delays, Takens' embedding time-delays and embedding dimensions, and
             transfer entropy values.
+        use_pairwise : bool, default=False
+            Whether to use the pairwise matrix provided during class
+            instantiation or the most recently computed.
 
         Returns
         -------
@@ -289,7 +307,7 @@ class InfoPaths():
         # Compute our time-delays
         if delays is None:
             if verbosity:
-                print("1. Time Delays: computing... ", end="")
+                print("1. Time Delays: computing... ", end="", flush=True)
             delays = self.compute_delays()
             if verbosity:
                 print("Done!")
@@ -309,7 +327,7 @@ class InfoPaths():
         # Compute embedding dimensions
         if embeds is None:
             if verbosity:
-                print("2. Embedding Dimensions: computing... ", end="")
+                print("2. Embedding Dimensions: computing... ", end="", flush=True)
             embeds = self.compute_embeds()
             if verbosity:
                 print("Done!")
@@ -333,11 +351,11 @@ class InfoPaths():
         for i in range(self._ncols):
             if verbosity:
                 t1 = time()
-                print(f"  Destination #{i}... ", end="")
+                print(f"  Destination #{i}... ", end="", flush=True)
 
             adjacency[i], TE[i] = self.analyze_destination(
                 which=i, delays=delays, embeds=embeds, threshold=threshold,
-                k=4, return_te=True, verbosity=verbosity
+                k=4, return_te=True, use_pairwise=use_pairwise
             )
 
             if verbosity:
