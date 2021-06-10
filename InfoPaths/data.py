@@ -1,5 +1,5 @@
 import numpy as np
-from utilities import mutual_information as mi
+from .utilities import mutual_information as mi
 from sklearn.neighbors import NearestNeighbors
 
 

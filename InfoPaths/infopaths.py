@@ -4,9 +4,9 @@ from time import time
 from pickle import dump
 from concurrent.futures import ProcessPoolExecutor
 
-from data import Data
-from utilities import transfer_entropy as te
-from utilities import conditional_transfer_entropy as cte
+from .data import Data
+from .utilities import transfer_entropy as te
+from .utilities import conditional_transfer_entropy as cte
 
 
 class InfoPaths():
