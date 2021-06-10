@@ -193,7 +193,7 @@ class InfoPaths():
         te_sources = []
 
         # Adjacency vector where 1 represents a viable source
-        adjacency = np.zeros(self._ncols)
+        adjacency = np.zeros(self._ncols)def
 
         # Assign destination variables
         dest = self._X[:, which]
@@ -384,7 +384,7 @@ class InfoPaths():
                     if val == 1:
                         sources.append(j)
 
-                print(f"    Sources: {sources}")
+                print(f"    Pruned Sources: {sources}")
 
         if verbosity:
             hours = (time() - t0) / 3600

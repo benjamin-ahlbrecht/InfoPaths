@@ -1,9 +1,59 @@
 import numpy as np
 from scipy.special import psi
-from sklearn.neighbors import NearestNeighbors
+from scipy.spatial import cKDTree
+from concurrent.futures import ProcessPoolExecutor
 
 
-def mutual_information(x, y, k=4, locals=False):
+def split_arange(start=0, stop=10, batch_size=5):
+    splits = []
+    while start < stop - batch_size:
+        splits.append(range(start, start+batch_size))
+
+
+        start += batch_size
+        if start + batch_size > stop - 1:
+            splits.append(range(start, stop))
+
+    return splits
+
+
+def rnn(args):
+    """Radius-neighbors function used to parallize the radius-neighbors search.
+
+    Parameters
+    ----------
+    args : (cKDTree, x, r, batches, index)
+        Function arguments as a tuple, where...
+        cKDTree : tuple of cKDTree objects
+        x : tuple of np.ndarray of points to sample
+        r : tuple of np.ndarray of radii which produced the hyper-square
+        batches : tuple of ranges() indicating the indices each batch Computes
+        index : tuple of ints representing the batch indices to iterate over
+
+    Returns
+    -------
+    rnn : np.ndarray of ints
+        The radius neighbors for each point queried
+    """
+    # Unpack the arguments
+    kd_tree, x, r, batches, index = args
+
+    # Grab the right batch from our batches
+    batch = batches[index]
+    n_tasks = len(batch)
+
+    # Fill an empty radius-neighbors array with the queries from the batch
+    rnn = np.zeros(n_tasks, dtype=int)
+
+    # Iterate through each task in the batch and assign it to rnn
+    for i, task in enumerate(batch):
+        rnn[i] = kd_tree.query_ball_point(
+            x=x[task], r=r[task], p=np.inf, return_length=True) - 1
+
+    return rnn
+
+
+def mutual_information(x, y, k=4, batch_size=None):
     """Calculates the mutual information between two time-series using the
     approach proposed by Kraskov, Stoegbauer, and Grassberger (KSG).
 
@@ -16,6 +66,9 @@ def mutual_information(x, y, k=4, locals=False):
     locals : bool, default=False
         Whether to return local values whose expectation produces the mutual
         information
+    batch_size : int or None, default=None
+        How many radius-neighbors indices each sub-process should handle. If
+        batch_size=None, the optimum number will be estimated.
 
     Returns
     -------
@@ -35,62 +88,54 @@ def mutual_information(x, y, k=4, locals=False):
     # Number of observations
     n = xy.shape[0]
 
-    # Generate the KD-tree
-    kd_tree = NearestNeighbors(
-        algorithm='kd_tree', metric='chebyshev', n_neighbors=k)
+    # Number of tasks each batch should perform
+    if batch_size is None:
+        batch_size = int(n / 6)
 
-    # Calculate the hyper-square radius about the full joint space
-    kd_tree.fit(xy)
-    radius = kd_tree.kneighbors()[0]
-    radius = np.nextafter(radius[:, -1], 0)
-    del xy
+    # Create a batch of tasks to maximize the usage of each sub-process
+    batches = split_arange(start=0, stop=n, batch_size=batch_size)
+    n_batches = len(batches)
 
-    # Count the number of neighbors in the necessary marginal spaces
-    kd_tree.fit(x)
-    ind = kd_tree.radius_neighbors(radius=radius, return_distance=False)
-    n_x = np.array([i.size for i in ind])
-    del x
+    # Construct the kd-trees
+    kd_tree_xy = cKDTree(xy)
+    kd_tree_x = cKDTree(x)
+    kd_tree_y = cKDTree(y)
 
-    kd_tree.fit(y)
-    ind = kd_tree.radius_neighbors(radius=radius, return_distance=False)
-    n_y = np.array([i.size for i in ind])
-    del y
+    # Generate the hyper-square radius about the joint space
+    dists = kd_tree_xy.query(xy, k=k+1, p=np.inf, workers=-1)[0]
+    radius = dists[:, -1]
 
-    # Save some cpu cycles by avoiding superfluous addition for expected value
-    if locals:
-        # Calculate and return local mutual information values
-        mi = psi(n) + psi(k) - psi(n_x+1) - psi(n_y+1)
-        return mi
+    # Since we only want to query points less than the radius, reduce it a tid
+    radius -= 10**-16
 
-    # Calculate and return expected mutual information values
-    mi = psi(n) + psi(k) - np.mean(psi(n_x+1) + psi(n_y+1))
+    # Create our arguments list for each sub-space
+    args_x = ((kd_tree_x, x, radius, batches, i) for i in range(n_batches))
+    args_y = ((kd_tree_y, y, radius, batches, i) for i in range(n_batches))
+
+    # Use multiprocessing to estimate the radius-neighbors for each batch
+    with ProcessPoolExecutor() as pool:
+        results_x = pool.map(rnn, args_x)
+        results_y = pool.map(rnn, args_y)
+
+    # Concatenate each batch together into np.ndarrays n_x and n_y
+    n_x = []
+    n_y = []
+
+    for result in results_x:
+        n_x.extend(result)
+
+    for result in results_y:
+        n_y.extend(result)
+
+    n_x = np.array(n_x)
+    n_y = np.array(n_y)
+
+    # Estimate the mutual information
+    mi = psi(n) + psi(k) - np.mean(psi(n_x + 1) + psi(n_y + 1))
     return mi
 
 
-def conditional_mutual_information(source, destination, condition, k=4,
-                                   locals=False):
-    """Calculates the conditional mutual information between two time-
-    series given a third using the Kraskov, Stoegbauer, Grassberger (KSG)
-    mutual information estimator (algorithm 1).
-
-    Parameters
-    ----------
-    source : np.ndarray
-        Array representing the source time-series variable.
-    destination : np.ndarray
-        Array representing the destination time-series variable.
-    condition : np.ndarray
-        Array representing the conditonal time-series variable
-    k : int, default=4
-        Number of nearest neighbors to sample in the full joint space.
-    locals : bool, default=False
-        Whether to return local values whose expectation produces the
-        conditional mutual information
-
-    Returns
-    -------
-    cmi : float or np.ndarray of floats
-    """
+def conditional_mutual_information(source, destination, condition, k=4, batch_size=None):
     # 1 letter variables will be easier to work with moving on
     x = source
     y = destination
@@ -111,46 +156,66 @@ def conditional_mutual_information(source, destination, condition, k=4,
     xz = np.column_stack((x, z))
     yz = np.column_stack((y, z))
 
-    # Generate the KD-tree to create joint radii and sample marginal neighbors
-    kd_tree = NearestNeighbors(
-        algorithm='kd_tree', metric='chebyshev', n_neighbors=k)
+    # Number of observations
+    n = xyz.shape[0]
 
-    # Calculate the hyper-square radius about the full joint space using k
-    kd_tree.fit(xyz)
-    radius = kd_tree.kneighbors()[0]
-    radius = np.nextafter(radius[:, -1], 0)
-    del xyz
+    # Number of tasks each batch should perform
+    if batch_size is None:
+        batch_size = int(n / 6)
 
-    # Count the number of neighbors in the necessary marginal spaces
-    kd_tree.fit(xz)
-    ind = kd_tree.radius_neighbors(radius=radius, return_distance=False)
-    n_xz = np.array([i.size for i in ind])
-    del xz
+    # Create a batch of tasks to maximize the usage of each sub-process
+    batches = split_arange(start=0, stop=n, batch_size=batch_size)
+    n_batches = len(batches)
 
-    kd_tree.fit(yz)
-    ind = kd_tree.radius_neighbors(radius=radius, return_distance=False)
-    n_yz = np.array([i.size for i in ind])
-    del yz
+    # Construct the kd-trees
+    kd_tree_xyz = cKDTree(xyz)
+    kd_tree_xz = cKDTree(xz)
+    kd_tree_yz = cKDTree(yz)
+    kd_tree_z = cKDTree(z)
 
-    kd_tree.fit(z)
-    ind = kd_tree.radius_neighbors(radius=radius, return_distance=False)
-    n_z = np.array([i.size for i in ind])
-    del z
+    # Generate the hyper-square radius about the joint space
+    dists = kd_tree_xyz.query(xyz, k=k+1, p=np.inf, workers=-1)[0]
+    radius = dists[:, -1]
 
-    # We save some cpu cycles by avoiding superfluous addition at times
-    if locals:
-        # Calculate and return local conditional mutual information values
-        cmi = psi(k) + psi(n_z+1) - psi(n_xz+1) - psi(n_yz+1)
-        return cmi
+    # Since we only want to query points less than the radius, reduce it a tid
+    radius -= 10**-16
 
-    # Calculate and return expected conditional mutual information values
-    cmi = psi(k) + np.mean(psi(n_z+1) - psi(n_xz+1) - psi(n_yz+1))
+    # Create our arguments list for each sub-space
+    args_xz = ((kd_tree_xz, xz, radius, batches, i) for i in range(n_batches))
+    args_yz = ((kd_tree_yz, yz, radius, batches, i) for i in range(n_batches))
+    args_z = ((kd_tree_z, z, radius, batches, i) for i in range(n_batches))
+
+    with ProcessPoolExecutor() as executor:
+        results_xz = executor.map(rnn, args_xz)
+        results_yz = executor.map(rnn, args_yz)
+        results_z = executor.map(rnn, args_z)
+
+    # Concatenate each batch together into np.ndarrays n_x and n_y
+    n_xz = []
+    n_yz = []
+    n_z = []
+
+    for result in results_xz:
+        n_xz.extend(result)
+
+    for result in results_yz:
+        n_yz.extend(result)
+
+    for result in results_z:
+        n_z.extend(result)
+
+    n_xz = np.array(n_xz)
+    n_yz = np.array(n_yz)
+    n_z = np.array(n_z)
+
+    # Estimate the conditional mutual information
+    cmi = psi(k) + np.mean(psi(n_z + 1) - psi(n_xz + 1) - psi(n_yz + 1))
     return cmi
 
 
 def transfer_entropy(source, destination, delay=1, source_delay=1,
                      destination_delay=1, source_embed=1,
-                     destination_embed=1, k=4, locals=False):
+                     destination_embed=1, k=4, batch_size=None):
     """Calculates the transfer entropy from one time-series Y to another time-
     series X using the Kraskov, Stoegbauer, Grassberger (KSG)
     mutual information estimator algorithm 1.
@@ -173,9 +238,9 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
         Takens' embedding dimension of the destination variable.
     k : int, default=4
         The number of nearest neighbors to sample in the full joint space.
-    locals : bool, default=False
-        Whether to return the local values of the estimated transfer entropy
-        rather than the expected value.
+    batch_size : int or None, default=None
+        How many radius-neighbors indices each sub-process should handle. If
+        batch_size=None, the optimum number will be estimated.
 
     Returns
     -------
@@ -228,7 +293,7 @@ def transfer_entropy(source, destination, delay=1, source_delay=1,
                         for t in range(y_embed)])
 
     # Then, TE(Y -> X) = cmi(xp ; y | x)
-    TEyx = conditional_mutual_information(xp, y, x, k=k, locals=locals)
+    TEyx = conditional_mutual_information(xp, y, x, k=k, batch_size=batch_size)
     return TEyx
 
 
@@ -236,7 +301,7 @@ def conditional_transfer_entropy(source, destination, conditions,
                                  delay=1, source_delay=1, destination_delay=1,
                                  conditional_delays=1, source_embed=1,
                                  destination_embed=1, conditional_embeds=1,
-                                 k=4, locals=False):
+                                 k=4, batch_size=None):
     """Calculates the transfer entropy from one time-series Y to another time-
     series X using the Kraskov, Stoegbauer, Grassberger (KSG)
     mutual information estimator algorithm 1.
@@ -265,9 +330,9 @@ def conditional_transfer_entropy(source, destination, conditions,
         Takens' embedding dimension for the conditional variables
     k : int, default=4
         The number of nearest neighbors to sample in the full joint space.
-    locals : bool, default=False
-        Whether to return the local values of the estimated transfer entropy
-        rather than the expected value.
+    batch_size : int or None, default=None
+        How many radius-neighbors indices each sub-process should handle. If
+        batch_size=None, the optimum number will be estimated.
 
     Returns
     -------
@@ -340,5 +405,5 @@ def conditional_transfer_entropy(source, destination, conditions,
         xz = np.column_stack((xz, condition))
 
     # Then, CTE(Y -> X | Z) = cmi(xp ; y | xz)
-    CTEyx = conditional_mutual_information(xp, y, xz, k=k, locals=locals)
+    CTEyx = conditional_mutual_information(xp, y, xz, k=k, batch_size=batch_size)
     return CTEyx
