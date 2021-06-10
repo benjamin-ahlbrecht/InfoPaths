@@ -2,6 +2,7 @@ import numpy as np
 
 from time import time
 from pickle import dump
+from concurrent.futures import ProcessPoolExecutor
 
 from data import Data
 from utilities import transfer_entropy as te
@@ -153,6 +154,11 @@ class InfoPaths():
         # Return our estimated embedding dimensions
         return embeds
 
+    def te_pairwise_parallel(self, args):
+        y, x, d, y_d, x_d, y_e, x_e, k, batch_size = args
+        return te(y, x, d, y_d, x_d, y_e, x_e, k, batch_size)
+
+
     def analyze_destination(self, which, delays, embeds, threshold=0.1, k=4,
                             return_te=False, use_pairwise=False):
         """Uses the pairwise transfer entropy to infer significant sources
@@ -193,7 +199,7 @@ class InfoPaths():
         te_sources = []
 
         # Adjacency vector where 1 represents a viable source
-        adjacency = np.zeros(self._ncols)def
+        adjacency = np.zeros(self._ncols)
 
         # Assign destination variables
         dest = self._X[:, which]
@@ -205,21 +211,13 @@ class InfoPaths():
             # Grab transfer entropy values: sources -> destination
             TE = self._pairwise_te[:, which]
         else:
-            # Array to hold TE values from each source to the target destination
-            TE = np.zeros(self._ncols)
-            for i in range(self._ncols):
-                # Assign source parameters
-                source = self._X[:, i]
-                source_delay = delays[i]
-                source_embed = embeds[i]
+            # Args used to parallize the calculations
+            args = ((self._X[:, i], dest, 1, delays[i], dest_delay, embeds[i], dest_embed, k, None) for i in range(self._ncols))
+            with ProcessPoolExecutor() as pool:
+                results = pool.map(self.te_pairwise_parallel, args)
 
-                # Populate our TE array with respective source values
-                TE[i] = te(
-                    source=self._X[:, i], destination=dest, delay=1,
-                    source_delay=source_delay, destination_delay=dest_delay,
-                    source_embed=source_embed, destination_embed=dest_embed,
-                    k=k, locals=False
-                    )
+            # Array to hold TE values from each source to the target destination
+            TE = np.array(list(results))
 
         # Find potential sources by testing against the threshold
         for i, val in enumerate(TE):
@@ -259,7 +257,7 @@ class InfoPaths():
                     destination_delay=dest_delay,
                     conditional_delays=conditional_delays,
                     source_embed=source_embed, destination_embed=dest_embed,
-                    conditional_embeds=conditional_embeds, k=k, locals=False
+                    conditional_embeds=conditional_embeds, k=k
                 )
 
                 # Update adjacency vector if we meet the threshold

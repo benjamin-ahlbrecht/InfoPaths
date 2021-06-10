@@ -123,7 +123,6 @@ class Data():
         cutoff : float, default=0.9
             The cutoff point used to determine the minimum embedding dimension.
 
-
         Returns
         -------
         embed : int
