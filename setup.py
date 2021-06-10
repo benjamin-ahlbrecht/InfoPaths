@@ -4,7 +4,7 @@ setup(
     packages = ['InfoPaths'],
     version = '0.1',
     license='MIT',
-    description = 'TYPE YOUR DESCRIPTION HERE',
+    description = 'Straight-forward causality analysis for continuous-valued data. We use the Kraskov-Stoegbauer-Grassberger (KSG) mutual information estimator for transfer entropy and conditional transfer entropy estimation, and the technique proposed by Duan et al. to distinguish direct and spurious causality.',
     author = 'Benjamin Ahlbrecht',
     author_email = 'BenjaminAhlbrecht@gmail.com',
     url = 'https://github.com/benjamin-ahlbrecht/InfoPaths',
