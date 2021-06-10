@@ -8,7 +8,7 @@ setup(
     author = 'Benjamin Ahlbrecht',
     author_email = 'BenjaminAhlbrecht@gmail.com',
     url = 'https://github.com/benjamin-ahlbrecht/InfoPaths',
-    download_url = 'https://github.com/benjamin-ahlbrecht/InfoPaths/archive/refs/tags/v1.0-alpha.tar.gz',
+    download_url = 'https://github.com/benjamin-ahlbrecht/InfoPaths/archive/refs/tags/v0.1-alpha.tar.gz',
     keywords = [
         'Information Theory',
         'Transfer Entropy',
@@ -23,22 +23,23 @@ setup(
         'Time Series Analysis',
         'Granger Causality'
     ],
-    install_requires=[            # I get to this in a second
+    install_requires=[
         'numpy',
         'sklearn',
         'scipy'
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
-        'Intended Audience :: Statisticians',
-        'Topic :: Software Development :: Build Tools',
+        'Intended Audience :: Science/Research',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.0',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
 )
