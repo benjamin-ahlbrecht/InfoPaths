@@ -1,10 +1,10 @@
-# Quantifying Cooperation and Allostery in Protein-DNA Complexes
+# Quantifying Cooperation and Allostery in Protein-DNA Complexes Via an Information-Theoretic Approach
 
-We present a method for quantifying internal allosteric networks within proteins using transfer entropy, a statistical measure derived from Schreiber (2000) used for measuring the statistical coherence between time-series. Using the trajectory of alpha carbons in molecules as time-series data, we are able to deduce aspects of the fluctuational dynamics within proteins.
+We present a method for quantifying internal allosteric networks within proteins using transfer entropy, a statistical measure derived from Schreiber (2000) used for measuring the statistical coherence between time-series. Using the trajectory of alpha carbons in Cartesian Space as time-series data, we extract information regarding how fluctuations originating in one part of a protein cascade throughout the entire complex. More-over, Fluctuations do not always simply dissipate. Cycles of information flow between key residues can be extracted to deduce synergistic interactions throughout the complex.
 
 ## Model Systems
 
-A set of 2 protein-DNA complexes were utilized in this study: the gal and lac operons bound to their respective repressors. Supposedly, fluctuations originating from the hinge-helix region cause a distinct "bend" in the DNA. Molecular dynamics (MD) simulations were performed and Gaussian Network Models (GNM) were calculated for these complexes and their mis-matches (gal repressor bound to lac operon and vice versa). The hope is that transfer entropy will reveal influential residues elucidating the origin of DNA bending.
+A set of 2 protein-DNA complexes were utilized in this study: the gal and lac operons bound to their respective repressors. Fluctuations originating from the hinge-helix region cause a distinct "bend" in the DNA. Molecular dynamics (MD) simulations were performed and Gaussian Network Models (GNM) were calculated for these complexes and their mis-matches (gal repressor bound to lac operon and vice versa). 
 
 ## Transfer Entropy
 
@@ -16,12 +16,5 @@ Classically, transfer entropy estimates dictate how many bits or nats (as dictat
 
 ## Constructing Information Flow Networks
 
-Since transfer entropy quantifies how much uncertainty (entropy) one variable reduces in another variable, it is often referred to a measure of "information flow" between systems. When calculating information flow in large networks (such as proteins), one can simply calculate the transfer entropy between each pair of nodes in the network, creating a pairwise transfer entropy matrix. Additionally, to determine the direction of information flow between two nodes, it is natural to simply subtract the information flow between the two opposing directions. This is equivalent to subtracting the transposed pairwise matrix from its original. Last, it is often useful 
+Since transfer entropy quantifies how much uncertainty (entropy) one variable reduces in another variable, it is often referred to a measure of "information flow" between systems. When calculating information flow in large networks (such as proteins), one can simply calculate the transfer entropy between each pair of nodes in the network, creating a pairwise transfer entropy matrix. Additionally, to determine the direction of information flow between two nodes, it is natural to simply subtract the information flow between the two opposing directions. This is equivalent to subtracting the transposed pairwise matrix from its original.
 
-## Future Work
-
-Transfer entropy appears promising in the analysis of the fluctuation dynamics present in proteins. While it is insufficient for determining the significance of specific residues, it is able to show influential regions within protein-DNA complexes such as the hinge-helices. Regardless, much more work must be done to effectively evaluate an the information-theoretic basis of transfer entropy. Some ideas are discussed below:
-
-1. It is possible to condition on other possible sources to remove redundant information or add synergistic information. While it is computationally unrealistic to test all sources within a large network, it may be possible to test other potential sources of a given destination.
-2. Fluctuational dynamics cannot be explained using the trajectory of atoms alone. It may be helpful to conditional on other variables such as local potential energies within the residues in the protein.
-3. An enhanced graph-theory analysis may effectively cluster influential residues together. Possible options may be a minimum spanning tree (MST) or planar maximally filtered graph (PMFG), which have been shown to work effectively with partial correlations. Since transfer entropy can be easily expressed as a difference between mutual informations, it is entirely possible to create a distance metric to effectively represent transfer entropy networks visually.
